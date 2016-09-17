@@ -13,6 +13,9 @@ from rl_base import *
 import explore_exploit_policies
 from explore_exploit_policies import *
 
+import advantage_functions
+from advantage_functions import *
+
 import matplotlib.pyplot as plt#For plotting end results
 
 env = gym.make('CartPole-v0')
@@ -32,6 +35,7 @@ epsilon_decay_rate = -6.0/epochs
 learning_rate_decay_rate = -6.0/epochs
 #mb_decay_rate = 4.0/epochs
 explore_exploit_policy = explore_exploit_policies.epsilon_greedy()
+advantage_function = advantage_functions.updated_mean()
 
 initial_epsilon = 0.0
 initial_learning_rate = 0.1
@@ -146,7 +150,6 @@ for epoch in range(epochs):
                     if epoch % 50 == 0 and mb_i == 0:
                         env.render()
 
-
             tmp = np.zeros(shape=(mb_n, timestep_n, feature_n))
             tmp[0][0] = state
 
@@ -161,17 +164,13 @@ for epoch in range(epochs):
             state, reward, done, info = env.step(action)
             
             #Modify with discount factor if we choose to
-            #reward = reward * discount_factor**(float(timestep_n)-t_i)
             reward *= discount_factor**(t_i)
 
             #Store reward and use it for baseline function calculation
-            #Baseline is continuously updated average of rewards
             rewards[t_i] = reward
-            baseline = np.mean(rewards)
 
-            #Advantage for this timestep computed as follows:
-            #Discounted reward - baseline function output for t
-            advantage = reward - baseline
+            #Get advantage using our advantage function class
+            advantage = advantage_function.get_advantage(rewards, reward)
 
             #For use in measuring progress
             #total_reward += reward
@@ -179,7 +178,6 @@ for epoch in range(epochs):
 
             #Insert state, chosen action index, and reward
             mb_states[mb_i][t_i] = state
-            #mb_chosen_actions[mb_i][t_i] = int(action)#Store index
             mb_chosen_actions[mb_i][t_i][action] = 1
             mb_advantages[mb_i][t_i] = advantage
             
@@ -203,7 +201,7 @@ for epoch in range(epochs):
 
     #For progress
     #print "Epoch: %i, Avg Timesteps: %i, Cost: %f" % (epoch, avg_timesteps, cost_mb)
-    print "Epoch: %i, Best Timesteps: %i, Cost: %f, Learning Rate: %f, Mini Batches %i" % (epoch, max_timesteps, cost_mb, learning_rate, mb_n)
+    print "Epoch: %i, Best Timesteps: %i, Cost: %f, Learning Rate: %f" % (epoch, max_timesteps, cost_mb, learning_rate)
     #print "\tActions: {}".format(a_v)
 
 if graph_cost:
