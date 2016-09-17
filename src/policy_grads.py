@@ -1,7 +1,3 @@
-"""
-This one uses the baseline factor
-"""
-
 import gym
 import numpy as np
 import sys
@@ -14,31 +10,12 @@ from layers3D import *
 import rl_base
 from rl_base import *
 
+import explore_exploit_policies
+from explore_exploit_policies import *
+
 import matplotlib.pyplot as plt#For plotting end results
 
 env = gym.make('CartPole-v0')
-
-class epsilon_explore_exploit(object)
-    """
-    EPSILON GREEDY EXPLOIT-EXPLORE
-    """
-    @staticmethod
-    def get_action(action_vector):
-        if epsilon_greedy(epsilon):
-            #Random action
-            action = np.random.randint(0, len(action_vector))
-
-        else:
-            #Policy Action
-            action = np.argmax(a_v)
-
-class softmax_explore_exploit(object)
-    """
-    SOFTMAX DISCRETE DISTRIBUTION EXPLOIT-EXPLORE
-    """
-    @staticmethod
-    def get_action(action_vector):
-        action = from_discrete_dist(a_v)[0]
 
 "Main Parameters"
 #Number of actions
@@ -54,6 +31,7 @@ timestep_n = 200#Timesteps
 epsilon_decay_rate = -6.0/epochs
 learning_rate_decay_rate = -6.0/epochs
 #mb_decay_rate = 4.0/epochs
+explore_exploit_policy = explore_exploit_policies.epsilon_greedy()
 
 initial_epsilon = 0.0
 initial_learning_rate = 0.1
@@ -81,14 +59,13 @@ layers = [
 params = [param for layer in layers for param in layer.params]
 
 x = T.tensor3("x")#No actual need for a y
-net_mb_n = T.scalar()
 init_layer = layers[0]
-init_layer.set_inpt(x, net_mb_n, timestep_n)
+init_layer.set_inpt(x, mb_n, timestep_n)
 
 for j in xrange(1, len(layers)):
     prev_layer, layer = layers[j-1], layers[j]
     layer.set_inpt(
-        prev_layer.output, net_mb_n, timestep_n)
+        prev_layer.output, mb_n, timestep_n)
 
 output = layers[-1].output
 "End network initialization"
@@ -178,9 +155,7 @@ for epoch in range(epochs):
             a_v = NN_eval(tmp)[0][0]
 
             #Get action value and action
-            action = explore_exploit_policy.get_action(a_v)
-            if epsilon_explore_policy:
-            elif softmax_explore_policy:
+            action = explore_exploit_policy.get_action(epsilon, a_v)
 
             #Execute action and get state and reward
             state, reward, done, info = env.step(action)
