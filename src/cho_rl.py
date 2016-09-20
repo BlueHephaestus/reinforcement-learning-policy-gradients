@@ -5,11 +5,11 @@ from scipy.optimize import minimize
 import cho_base
 from cho_base import HyperParameter
 
-import cho_config
-from cho_config import Configurer
+import policy_gradient_configurer
+from policy_gradient_configurer import Configurer
 
 #import sound_notifications
-import sms_notifications
+#import sms_notifications
 
 """
 BEGIN USER INTERFACE FOR CONFIGURATION
@@ -17,116 +17,49 @@ BEGIN USER INTERFACE FOR CONFIGURATION
 n_y = 20#Number of top y values we average over in our output
 run_count = 3
 run_decrement = 0#Amount we decrease the number of runs as we iterate. Will start at initial and never go < 1
-epochs = 150
-global_config_count = 1#DON'T FORGET TO UPDATE, need to get this automatically...
-output_types = 1
-optimization='vanilla'
-#archive_dir = "../dennis/dennis4/data/mfcc_expanded_samples.pkl.gz"#Our input data
-archive_dir = "../lira/lira1/data/samples_subs2.pkl.gz"
+output_training_cost = False#looking at avg timesteps, not this
 
-output_training_cost = False
-output_training_accuracy = False
-output_validation_accuracy = True
-output_test_accuracy = False
+#TODO: add this
+global_config_count = 1
+
+epochs = 400
+timestep_n = 200
+
 final_test_run = False
-#0 = Training Cost, 1 = Training Accuracy, etc.
-
-sms_alerts = False#Disable to disable sms altogether
-sms_multiple_alerts = False#Disable to send one big message at the end instead of every optimization
 
 #Initialize our configurer
-configurer = Configurer(epochs, output_types, output_training_cost, output_training_accuracy, output_validation_accuracy, output_test_accuracy, archive_dir)
-
-#Set array to append to we are doing one big alert
-if not sms_multiple_alerts: sms_messages = []
+configurer = Configurer(epochs, timestep_n)
 
 #The values we have until we optimize
+initial_n = 0.1
+initial_r_n = 6.0
 initial_m = 10
-initial_n = .5
-initial_u = 0.0
-initial_v = 0.0
-initial_l = 0.0
-initial_p = 0.0
+initial_df = 0.95
 
 for global_config_index in range(global_config_count):
     #Our default schedule to optimize a topology
-    """
-    NOTE
-
-    LOWERED .01 SPECIFICITY TO .1
-    """
+    """MODIFIED BECAUSE OF INTERRUPTION"""
     hp_schedules = [
         [
             cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
-            cho_base.HyperParameter(0.1, 3.1, 1.0, .1, .1, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
+            cho_base.HyperParameter(3.56, 3.56, 0.0, .1, .01, "Learning Rate"),
+            cho_base.HyperParameter(.48, .48, 0.0, .1, .01, "Learning Rate Decay Rate"),
+            cho_base.HyperParameter(initial_df, initial_df, 0, .1, 1, "Discount Factor"),
         ],
         [
             cho_base.HyperParameter(10, 100, 10, .1, 1, "Mini Batch Size"),
             cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
+            cho_base.HyperParameter(initial_r_n, initial_r_n, 0, .1, .01, "Learning Rate Decay Rate"),
+            cho_base.HyperParameter(initial_df, initial_df, 0, .1, 1, "Discount Factor"),
         ],
         [
             cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
             cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(0.0, 0.9, .1, .1, 0.1, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
-        ],
-        [
-            cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
-            cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(0.0, 2.0, 1.0, .1, 0.1, "L2 Regularization Rate"),
-            cho_base.HyperParameter(0.0, 0.9, 0.1, .1, 0.1, "Dropout Regularization Percentage")
+            cho_base.HyperParameter(initial_r_n, initial_r_n, 0, .1, .01, "Learning Rate Decay Rate"),
+            cho_base.HyperParameter(0.5, 1.0, .1, .1, 1, "Discount Factor"),
         ],
     ]
 
-    """
-    #Minimal schedule for optimization, currently testing viability
-    hp_schedules = [
-        [
-            cho_base.HyperParameter(32, 132, 50, .4, 5, "Mini Batch Size"),
-            cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
-        ],
-        [
-            cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
-            cho_base.HyperParameter(0.01, 3.01, 1.0, .5, .125, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
-        ],
-        [
-            cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
-            cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(0.0, 0.9, .3, .5, 0.15, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(initial_l, initial_l, 0.0, .1, 0.01, "L2 Regularization Rate"),
-            cho_base.HyperParameter(initial_p, initial_p, 0.0, .1, 0.01, "Dropout Regularization Percentage")
-        ],
-        [
-            cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
-            cho_base.HyperParameter(initial_n, initial_n, 0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(initial_u, initial_u, 0, .1, 0.01, "Optimization Term 1"),
-            cho_base.HyperParameter(initial_v, initial_v, 0, .1, 0.01, "Optimization Term 2"),
-            cho_base.HyperParameter(0.0, 2.0, 1.0, .5, 0.125, "L2 Regularization Rate"),
-            cho_base.HyperParameter(0.0, 0.9, 0.3, .5, 0.15, "Dropout Regularization Percentage")
-        ],
-    ]
-    """
     """
     END USER INTERFACE FOR CONFIGURATION
     """
@@ -178,11 +111,7 @@ for global_config_index in range(global_config_count):
                 if final_test_run:
                     #Feel free to disable this
                     print "Getting Final Optimized Resulting Values..."
-                    config_avg_result = list(configurer.run_config(run_count, hp_vectors[0][0], hp_vectors[1][0], optimization, hp_vectors[2][0], hp_vectors[3][0], hp_vectors[4][0], hp_vectors[5][0], 360, 419, 69).items())
-                    print "Final Results with chosen Optimized Values(You should know what output types you enabled so you know what these stand for):"
-                    for output_type_index, output_type in enumerate(config_avg_result[0][1]):#Just so we know the number
-                        print "Output Type #%i: %s" % (output_type_index, ', '.join(map(str, [epoch[1][output_type_index] for epoch in config_avg_result[-n_y:]])))
-
+                    config_avg_result = configurer.run_config(run_count, hp_vectors[0][0], 0.0, hp_vectors[1][0], 0.0, hp_vectors[2][0], hp_vectors[3][0])
                     print "And here are the Optimized Hyper Parameters again:"
                     for hp_index, hp in enumerate(hp_vectors):
                         print "\t%s: %f" % (hps[hp_index].label, hps[hp_index].min)
@@ -218,30 +147,15 @@ for global_config_index in range(global_config_count):
                 hp_config[1:] = [float(hp) for hp in hp_config[1:]]
 
                 #Execute configuration, get the average entry in the output_dict as a list of it's items
-                config_avg_result = list(configurer.run_config(run_count, hp_config[0], hp_config[1], optimization, hp_config[2], hp_config[3], hp_config[4], hp_config[5], global_config_index, hp_config_index, hp_config_count).items())
-
+                config_avg_result = configurer.run_config(hp_config_index, len(hp_cp), run_count, hp_config[0], 0.0, hp_config[1], 0.0, hp_config[2], hp_config[3])
                 #Get our highest n_y values from the respective output_type values
-                #Since we shouldn't have any more output types than the one we need, currently
-                #config_y_vals = [config_y[1][0] for config_y in config_avg_result[-n_y:]]#We have our config_y[1] so we get the value, not the key
-                config_y_vals = [config_y[1][0] for config_y in config_avg_result]#Flatten
-                
-                '''
-                Would get values based on highest values, not consistent or reliable enough to use for HP optimization.
-                Moving back to usual look-at-last n_y values, as shown in next line.
-                if output_training_cost:
-                    config_y_vals.sort()#Sort in ascending order
-                else:
-                    config_y_vals.sort(reverse=True)#Sort in descending order
-
-                config_y_vals = config_y_vals[:n_y]#Get the relevant subset number
-                '''
-                config_y_vals = config_y_vals[:-n_y]#Get the last n_y values to look at.
+                config_y_vals = config_avg_result[:-n_y]#Get the last n_y values to look at.
                 config_avg_y_val = np.mean(config_y_vals)
                 #config_avg_y_val = sum(config_y_vals)/float(n_y)
 
                 if not output_training_cost:
                     #So we make this into a find-the-minimum one if it's looking at accuracy, which we want to be higher
-                    config_avg_y_val = 100.0 - config_avg_y_val
+                    config_avg_y_val = timestep_n - config_avg_y_val
 
                 #Add our result to each of our configs in hp_results
                 hp_cp_results.append(config_avg_y_val)
