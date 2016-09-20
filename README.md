@@ -21,7 +21,7 @@ TODO:
   2. Support for other types of action spaces, seeing as cartpole is better done with the Cross Entropy Method I will likely adjust Policy Gradients to modify the mean and variance of multiple Gaussian Distributions to draw parameters from them, instead for instance.
   3. Various other improvements and upgrades as I see them, including any cleverness I figure out for CHO or Policy Gradients
 
-I also included my Cross-Entropy Method for Black Box optimization in here, in case you'd like that too.
+I also included my Cross-Entropy Method for Black Box optimization in here, in case you'd like that too. (In old/)
 
 ###If you want good resources for understanding policy gradient reinforcement learning better, look here:
 
