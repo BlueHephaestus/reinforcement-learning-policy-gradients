@@ -14,6 +14,12 @@ I won't go into the detailed intricacies here, however you can find a working im
   5. Repeatedly updated mean of rewards up to the current timestep for baseline algorithm implementation (See resources if you don't know what this is)
   6. Matplotlib graphed output of results
   7. Reward Discount factor
+  8. Added [CHO](https://github.com/DarkElement75/cho) and cleaned up a bit, automatically optimizes training hyper parameters on environment.
+
+TODO:
+  1. Bayesian Hyper Parameter Optimization as an upgrade to CHO will be reflected in here as well as several other repos(Currently working on this)
+  2. Support for other types of action spaces, seeing as cartpole is better done with the Cross Entropy Method I will likely adjust Policy Gradients to modify the mean and variance of multiple Gaussian Distributions to draw parameters from them, instead for instance.
+  3. Various other improvements and upgrades as I see them, including any cleverness I figure out for CHO or Policy Gradients
 
 I also included my Cross-Entropy Method for Black Box optimization in here, in case you'd like that too.
 
