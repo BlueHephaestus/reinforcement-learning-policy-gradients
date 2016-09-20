@@ -1,8 +1,8 @@
 #Description
 
-This repository consists of my policy gradient reinforcement learning code, for the classic control environment, [CartPole](https://gym.openai.com/envs/CartPole-v0). I used the extremely helpful resources provided by [OpenAI's gym](https://gym.openai.com/envs) to get the fitness, environmental features, etc. 
+This repository consists of my policy gradient reinforcement learning code, currently implemented for the classic control environment, [CartPole](https://gym.openai.com/envs/CartPole-v0) however I have done my best to make it as modular as possible to allow implementation into any of the other OpenAI environments, as well as other problems entirely. I used the extremely helpful resources provided by [OpenAI's gym](https://gym.openai.com/envs) to get the fitness, environmental features, etc. for now.
 
-Using this code, I was able to complete the cartpole challenge, as presented on the OpenAI environment description. Here's how it works:
+Using this code, I was able to complete the cartpole challenge, as presented on the OpenAI environment description(however I will be applying it to others soon). Here's how it works:
 
 The general idea behind using policy gradients (as far as I have gathered), is to use (stochastic/non-stochastic) gradient descent to update parameters of any number of things depending on the environment. I used a neural network, originally with the 4 inputs, a 4-hidden-neuron fully connected sigmoid layer, and a 2 output softmax layer for the actions. Note: you can also use the mean and variance of distributions for the weights, however I haven't done that yet, and was much more excited about the combination of neural network machine learning and fitness reinforcement machine learning.
 
