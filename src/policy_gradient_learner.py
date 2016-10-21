@@ -49,7 +49,7 @@ class PolicyGradientLearner(object):
         self.explore_exploit_policy = epsilon_greedy()
         self.advantage_function = updated_mean()
 
-        self.learning_rate = self.initial_learning_rate#Need this defined for updates
+        self.learning_rate = float(self.initial_learning_rate)#Need this defined for updates
 
         #For display
         self.render = False

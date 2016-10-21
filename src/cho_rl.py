@@ -44,7 +44,7 @@ for global_config_index in range(global_config_count):
         [
             cho_base.HyperParameter(initial_m, initial_m, 0, .1, 1, "Mini Batch Size"),
             cho_base.HyperParameter(3.56, 3.56, 0.0, .1, .01, "Learning Rate"),
-            cho_base.HyperParameter(.48, .48, 0.0, .1, .01, "Learning Rate Decay Rate"),
+            cho_base.HyperParameter(.45, .58, 0.0, .1, .01, "Learning Rate Decay Rate"),
             cho_base.HyperParameter(initial_df, initial_df, 0, .1, 1, "Discount Factor"),
         ],
         [

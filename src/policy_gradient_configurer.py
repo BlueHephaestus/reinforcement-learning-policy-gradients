@@ -13,11 +13,13 @@ class Configurer(object):
     def run_config(self, config_i, config_n, run_count, mb_n, initial_epsilon, initial_learning_rate, epsilon_decay_rate, learning_rate_decay_rate, discount_factor):
         #Need this
         mb_n = int(mb_n)
+        if mb_n == 0:
+            mb_n = 1
 
         #So these are optimized in a way that they still work on different E value (/epochs)
         #Negative value so we can still use our hyperparameter class and not go outside of range necessary
         epsilon_decay_rate = -epsilon_decay_rate/self.epochs
-        learning_rate_decay_rate = -learning_rate_decay_rate/self.epochs
+        learning_rate_decay_rate = -float(learning_rate_decay_rate)/self.epochs
 
         cartpole_agent = PolicyGradientLearner(self.epochs, mb_n, self.timestep_n, initial_epsilon, initial_learning_rate, discount_factor, epsilon_decay_rate, learning_rate_decay_rate)
 
