@@ -2,6 +2,7 @@ import gym
 import numpy as np
 import sys
 from tqdm import tqdm
+from joblib import Parallel, delayed
 
 import keras.backend as K
 from keras.models import Sequential
@@ -45,6 +46,7 @@ class PolicyGradientModel(object):
         self.render = False
         self.render_intermittent = False
 
+        #For stats
         self.costs = np.zeros(self.epochs)
         self.avg_rewards = np.zeros((self.epochs))
         self.avg_timesteps = np.zeros((self.epochs))
@@ -71,7 +73,6 @@ class PolicyGradientModel(object):
         self.model.compile(loss=self.pgrad_loss, optimizer=optimizer, metrics=["accuracy"])
 
     def pgrad_loss(self, predictions, actions):
-        #return self.intermediate
         return K.mean(K.categorical_crossentropy(predictions, actions) * self.advantages)
 
     def train(self):
@@ -83,8 +84,6 @@ class PolicyGradientModel(object):
             #self.learning_rate *= np.exp(learning_rate_decay_rate)
 
             for mb in tqdm(range(self.mb_n)):
-                #TODO: Make stepping parallel because otherwise we literally predict at every step
-                
                 #Reset game environment
                 state = self.env.reset()
 
@@ -93,7 +92,7 @@ class PolicyGradientModel(object):
                         self.env.render()
                     else:
                         if self.render_intermittent:
-                            if epoch % 50 == 0:
+                            if epoch % 10 == 0 and mb == 0:
                                 self.env.render()
 
                     #Get prediction vector from model and choose action index using our explore exploit policy
@@ -112,7 +111,6 @@ class PolicyGradientModel(object):
                     #Insert values for this timestep at proper sample index
                     sample_i = mb*self.mb_n+timestep
                     self.states[sample_i] = state
-                    #self.predictions[sample_i] = prediction
                     self.actions[sample_i][action] = 1.0
                     self.advantages[sample_i] = advantage
                     
@@ -125,12 +123,10 @@ class PolicyGradientModel(object):
                         break
 
             #Train the network for this one mini batch
-            #self.intermediate = -np.mean(np.sum(np.log(self.predictions)*self.actions, axis=2)*advantages)
-            #cost = self.model.train_on_batch(self.predictions, self.actions)
             cost = self.model.train_on_batch(self.states, self.actions)
 
             #Save performance stats for this epoch
-            #self.costs[epoch] = np.nan_to_num(cost)
+            self.costs[epoch] = np.nan_to_num(cost[0])
             self.avg_rewards[epoch] /= self.mb_n#Compute average from the sum
             self.avg_timesteps[epoch] /= self.mb_n#Compute average from the sum
 
