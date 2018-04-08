@@ -1,15 +1,12 @@
-
 import gym
 import numpy as np
 import sys
-import theano
-import theano.tensor as T
+from tqdm import tqdm
 
-import layers3D
-from layers3D import *
-
-import rl_base
-from rl_base import *
+import keras.backend as K
+from keras.models import Sequential
+from keras.layers import *
+from keras.optimizers import *
 
 import explore_exploit_policies
 from explore_exploit_policies import *
@@ -17,218 +14,125 @@ from explore_exploit_policies import *
 import advantage_functions
 from advantage_functions import *
 
-import matplotlib.pyplot as plt#For plotting end results
+class PolicyGradientModel(object):
+    def __init__(self, env_name, epochs=100, mb_n=20, timesteps=200, epsilon=0.5, learning_rate=1.0, discount_factor=1.0):
 
-class PolicyGradientLearner(object):
-    def __init__(self, epochs, mb_n, timestep_n, initial_epsilon, initial_learning_rate, discount_factor, epsilon_decay_rate, learning_rate_decay_rate):
-        "Hyper Parameters"
+        self.env_name = env_name
         self.epochs = epochs
-        self.mb_n = mb_n#Mini batches
-        self.timestep_n = timestep_n#Timesteps
+        self.mb_n = mb_n
+        self.timesteps = timesteps
 
-        self.initial_epsilon = initial_epsilon
-        self.initial_learning_rate = initial_learning_rate
+        self.epsilon = epsilon
+        #self.learning_rate = learning_rate
         self.discount_factor = discount_factor
 
-        self.epsilon_decay_rate = epsilon_decay_rate
-        self.learning_rate_decay_rate = learning_rate_decay_rate
-        "End Hyper Parameters"
+        #So that these will decay to .0001 by the final epoch
+        self.epsilon_decay_rate = -9.0/self.epochs
+        self.learning_rate_decay_rate = -9.0/self.epochs
 
-    def init_env(self, env_name):
-        #Initialize our network and action environment
-
-        "Main, Static Parameters"
+        #Initialize our environment 
+        print("Initializing Environment...")
         self.env = gym.make(env_name)
 
-        #Number of actions
-        self.action_n = self.env.action_space.n
+        #State and action shapes give us number of input and output features of the model
+        self.input_n, self.output_n = self.env.observation_space.shape[0], self.env.action_space.n
 
-        #Number of features observed
-        self.feature_n = self.env.observation_space.shape[0]
-
+        #TODO: Change these for hard functions?
         self.explore_exploit_policy = epsilon_greedy()
         self.advantage_function = updated_mean()
-
-        self.learning_rate = float(self.initial_learning_rate)#Need this defined for updates
 
         #For display
         self.render = False
         self.render_intermittent = False
-        self.costs = np.zeros(shape=(self.epochs))
-        self.avg_timesteps_global = np.zeros(shape=(self.epochs))
-        self.max_timesteps_global = np.zeros(shape=(self.epochs))
-        self.graph_cost = True
-        "End Main, Static Parameters"
 
-        "Start network initialization"
-        layers = [
-                    FullyConnectedLayer(n_in=self.feature_n, n_out=8),
-                    FullyConnectedLayer(n_in=8, n_out=8),
-                    SoftmaxLayer(n_in=8, n_out=self.action_n)
-                 ]
+        self.costs = np.zeros(self.epochs)
+        self.avg_rewards = np.zeros((self.epochs))
+        self.avg_timesteps = np.zeros((self.epochs))
 
-        params = [param for layer in layers for param in layer.params]
+        #For training
+        self.sample_n = self.mb_n*self.timesteps #Number of samples in each batch
+        self.states = np.zeros((self.sample_n, self.input_n))#Inputs to NN, states
+        self.predictions = np.zeros((self.sample_n, self.output_n))#Actual outputs of NN (softmax)
+        self.actions = np.zeros((self.sample_n, self.output_n))#Chosen actions based on explore-exploit policy (one-hot)
+        self.advantages = np.zeros((self.sample_n))#Reward of each chosen action
 
-        x = T.tensor3("x")#No actual need for a y
-        init_layer = layers[0]
-        init_layer.set_inpt(x, self.mb_n, self.timestep_n)
+        self.rewards = np.zeros((self.timesteps))
 
-        for j in xrange(1, len(layers)):
-            prev_layer, layer = layers[j-1], layers[j]
-            layer.set_inpt(
-                prev_layer.output, self.mb_n, self.timestep_n)
+        #Define and Initialize our model
+        print("Initializing Model...")
 
-        output = layers[-1].output
-        "End network initialization"
+        loss = "categorical_crossentropy"
+        optimizer = Adam(1e-4)
 
-        "Symbolic Variable Initializations"
-        #For use in computation
-        state = T.tensor3()
-        states = T.tensor3()
-        chosen_actions = T.tensor3()
-        advantages = T.matrix()
+        self.model = Sequential()
+        self.model.add(Dense(8, activation="sigmoid", input_shape=(self.input_n,)))
+        self.model.add(Dense(8, activation="sigmoid"))
+        self.model.add(Dense(self.output_n, activation="softmax"))
+        self.model.compile(loss=self.pgrad_loss, optimizer=optimizer, metrics=["accuracy"])
 
-        #Global
-        cost = -T.mean(
-                    T.sum(T.log(output)*chosen_actions, axis=2)
-                        * 
-                    advantages
-                )
-        grads = T.grad(cost, params)
-        updates = []
+    def pgrad_loss(self, predictions, actions):
+        #return self.intermediate
+        return K.mean(K.categorical_crossentropy(predictions, actions) * self.advantages)
 
-        for param, grad in zip(params, grads):
-            updates.append((param, param+self.learning_rate*grad))
+    def train(self):
 
-        "End Symbolic Variable Initializations"
+        print("Training Model on Environment...")
+        for epoch in tqdm(range(self.epochs)):
+            #Decay our epsilon value and learning rate by their decay rates
+            self.epsilon *= np.exp(self.epsilon_decay_rate)
+            #self.learning_rate *= np.exp(learning_rate_decay_rate)
 
-        "Symbolic Functions"
-        #To get our actions vector a_v from state s
-
-        self.network_eval = theano.function(
-                        [x], outputs=output, allow_input_downcast=True
-                        )
-
-        #We don't output our new grad_total_reward, though it does get changed with the inputs
-        self.train_mb = theano.function(
-                        [x, chosen_actions, advantages], outputs=cost, updates=updates, allow_input_downcast=True
-                        )
-                        
-        "End Symbolic Functions"
-
-    def train_env(self, config_i, config_n, run_i, run_n):
-        for epoch in range(self.epochs):
-
-            #self.mb_n = int(np.floor(exp_decay(initial_self.mb_n, mb_decay_rate, epoch)))
-            #print np.floor(exp_decay(initial_self.mb_n, mb_decay_rate, epoch))
-
-            #Reset these
-            mb_states = np.zeros(shape=(self.mb_n, self.timestep_n, self.feature_n))
-            mb_chosen_actions = np.zeros(shape=(self.mb_n, self.timestep_n, self.action_n), dtype='int32')
-            mb_advantages = np.zeros(shape=(self.mb_n, self.timestep_n))
-
-            #Decay our epsilon value(and learning rate if we want)
-            epsilon = exp_decay(self.initial_epsilon, self.epsilon_decay_rate, epoch)
-            self.learning_rate = exp_decay(self.initial_learning_rate, self.learning_rate_decay_rate, epoch)
-
-            #For monitoring progress
-            #avg_reward = 0
-            avg_timesteps = 0
-            max_timesteps = 0
-
-            for mb_i in range(self.mb_n):
+            for mb in tqdm(range(self.mb_n)):
+                #TODO: Make stepping parallel because otherwise we literally predict at every step
                 
                 #Reset game environment
                 state = self.env.reset()
 
-                #Reset rewards
-                rewards = np.zeros(shape=(self.timestep_n))
-
-                #For use in measuring progress
-                #total_reward = 0
-                total_timesteps = 0
-
-                #For t index in T
-                for t_i in range(self.timestep_n):
+                for timestep in tqdm(range(self.timesteps)):
                     if self.render:
                         self.env.render()
                     else:
                         if self.render_intermittent:
-                            if epoch % 50 == 0 and mb_i == 0:
+                            if epoch % 50 == 0:
                                 self.env.render()
 
-                    tmp = np.zeros(shape=(self.mb_n, self.timestep_n, self.feature_n))
-                    tmp[0][0] = state
+                    #Get prediction vector from model and choose action index using our explore exploit policy
+                    prediction = self.model.predict(np.array([state]))
+                    action = self.explore_exploit_policy.get_action(self.epsilon, prediction)
 
-                    #Our action vector for this state
-                    #TODO: get this so we can input one at a time instead of zeroed 3d tensor
-                    a_v = self.network_eval(tmp)[0][0]
-
-                    #Get action value and action
-                    action = self.explore_exploit_policy.get_action(epsilon, a_v)
-
-                    #Execute action and get state and reward
+                    #Execute action to get state and reward
                     state, reward, done, info = self.env.step(action)
                     
-                    #Modify with discount factor if we choose to
-                    reward *= self.discount_factor**(t_i)
+                    #Discount reward
+                    self.rewards[timestep] = reward*self.discount_factor**(timestep)
 
-                    #Store reward and use it for baseline function calculation
-                    rewards[t_i] = reward
+                    #Get advantage using our advantage function 
+                    advantage = self.advantage_function.get_advantage(self.rewards[:timestep+1], self.rewards[timestep])
 
-                    #Get advantage using our advantage function class
-                    advantage = self.advantage_function.get_advantage(rewards, reward)
-
-                    #For use in measuring progress
-                    #total_reward += reward
-                    total_timesteps += 1
-
-                    #Insert state, chosen action index, and reward
-                    mb_states[mb_i][t_i] = state
-                    mb_chosen_actions[mb_i][t_i][action] = 1
-                    mb_advantages[mb_i][t_i] = advantage
+                    #Insert values for this timestep at proper sample index
+                    sample_i = mb*self.mb_n+timestep
+                    self.states[sample_i] = state
+                    #self.predictions[sample_i] = prediction
+                    self.actions[sample_i][action] = 1.0
+                    self.advantages[sample_i] = advantage
                     
-                    #End iteration if we are done early
+                    #Increment these sums so they can be averaged after we're done with this epoch
+                    self.avg_rewards[epoch] += self.rewards[timestep]
+                    self.avg_timesteps[epoch] += 1
+
+                    #End iteration if we are done early / achieved a goal
                     if done:
                         break
 
-                #For progress
-                if (total_timesteps > max_timesteps):
-                    max_timesteps = total_timesteps
-                avg_timesteps += total_timesteps / float(self.mb_n)
-                #print "Epoch: %i, Sample: %i, Reward: %i, Epsilon: %f" % (epoch, mb_i, total_reward, epsilon)
+            #Train the network for this one mini batch
+            #self.intermediate = -np.mean(np.sum(np.log(self.predictions)*self.actions, axis=2)*advantages)
+            #cost = self.model.train_on_batch(self.predictions, self.actions)
+            cost = self.model.train_on_batch(self.states, self.actions)
 
-            #We execute our self.train_mb function to evaluate new cost and update params
-            #Since params are updated by grads which are updated by cost
-            #params <- grads <- cost <- inputs, chosen actions, & rewards
-            cost_mb = self.train_mb(mb_states, mb_chosen_actions, mb_advantages)
-            self.costs[epoch] = np.nan_to_num(cost_mb)
-            self.avg_timesteps_global[epoch] = avg_timesteps
-            self.max_timesteps_global[epoch] = max_timesteps
+            #Save performance stats for this epoch
+            #self.costs[epoch] = np.nan_to_num(cost)
+            self.avg_rewards[epoch] /= self.mb_n#Compute average from the sum
+            self.avg_timesteps[epoch] /= self.mb_n#Compute average from the sum
 
-            #For progress
-            #print "Epoch: %i, Avg Timesteps: %i, Cost: %f" % (epoch, avg_timesteps, cost_mb)
-            sys.stdout.write("\rConfig %i/%i, Run %i/%i, Epoch: %i/%i, Avg Timesteps: %i/%i\t" % (config_i+1, config_n, run_i+1, run_n, epoch+1, self.epochs, avg_timesteps, self.timestep_n))
-            sys.stdout.flush()
-            """
-            print "\tInitial Learning Rate: %f" % (self.initial_learning_rate)
-            print "\tLearning Rate Decay Rate: %f" % (self.learning_rate_decay_rate)
-            print "\tMini-Batch Size: %i" % (self.mb_n)
-            print "\tDiscount Factor: %f" % (self.discount_factor)
-            """
-            #print "\tActions: {}".format(a_v)
-
-        """
-        if self.graph_cost:
-            matplot_x = np.arange(self.epochs)
-            plt.subplot(1, 2, 1)
-            plt.plot(matplot_x, self.costs)
-            plt.subplot(1, 2, 2)
-            #plt.plot(matplot_x, self.avg_timesteps_global)
-            plt.plot(matplot_x, self.max_timesteps_global)
-            plt.show()
-        """
-
-        #Return a 2d array so that we have each element represent the values at each timestep
-        #Holy shit this is the best np method ever
-        return np.column_stack((self.costs, self.avg_timesteps_global, self.max_timesteps_global))
+pgm = PolicyGradientModel("Acrobot-v1", epochs=100, mb_n=20, timesteps=200, epsilon=1.0, learning_rate=3.0)
+pgm.train()
